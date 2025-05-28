@@ -23,7 +23,7 @@ const Index = () => {
   };
 
   const handleViewDemo = () => {
-    navigate("/create-contract");
+    navigate("/demo");
   };
 
   const plans = [
