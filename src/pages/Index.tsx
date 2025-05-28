@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -21,6 +20,10 @@ const Index = () => {
     } else {
       navigate("/auth");
     }
+  };
+
+  const handleViewDemo = () => {
+    navigate("/create-contract");
   };
 
   const plans = [
@@ -103,6 +106,7 @@ const Index = () => {
             </Button>
             
             <Button 
+              onClick={handleViewDemo}
               variant="outline" 
               size="lg"
               className="border-2 border-gray-300 text-gray-700 hover:border-blue-500 hover:text-blue-600 px-8 py-4 text-lg font-semibold rounded-xl transition-all duration-300"
