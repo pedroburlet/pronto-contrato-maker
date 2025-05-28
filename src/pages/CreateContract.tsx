@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +78,13 @@ const CreateContract = () => {
     confidentiality: false,
     onlineSignature: false
   });
+
+  // Corrigir a navegação movendo para useEffect
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth");
+    }
+  }, [user, navigate]);
 
   const contractTypes = [
     "Prestação de Serviço",
@@ -165,9 +172,16 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
     `;
   };
 
+  // Se não há usuário, mostrar loading em vez de renderizar a página
   if (!user) {
-    navigate("/auth");
-    return null;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Verificando autenticação...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
