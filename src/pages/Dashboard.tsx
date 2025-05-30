@@ -14,29 +14,29 @@ import {
   Edit,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Contract {
   id: string;
-  title: string;
-  type: string;
-  status: 'draft' | 'pending' | 'signed';
-  createdAt: string;
-  value: string;
-  parties: {
-    contractor: string;
-    contracted: string;
-  };
+  titulo: string;
+  dados_json: any;
+  created_at: string;
+  pdf_url: string | null;
 }
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, updateContractsUsed } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [contracts, setContracts] = useState<Contract[]>([]);
-  const [filter, setFilter] = useState<'all' | 'draft' | 'pending' | 'signed'>('all');
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'recent'>('all');
 
   useEffect(() => {
     if (!user) {
@@ -44,79 +44,92 @@ const Dashboard = () => {
       return;
     }
 
-    // Simulação de contratos - em produção viria da API
-    const mockContracts: Contract[] = [
-      {
-        id: '1',
-        title: 'Contrato de Desenvolvimento de Website',
-        type: 'Prestação de Serviço',
-        status: 'signed',
-        createdAt: '2024-05-20',
-        value: 'R$ 2.500,00',
-        parties: {
-          contractor: 'João Silva',
-          contracted: 'Tech Solutions LTDA'
-        }
-      },
-      {
-        id: '2',
-        title: 'Contrato de Consultoria',
-        type: 'Prestação de Serviço',
-        status: 'pending',
-        createdAt: '2024-05-25',
-        value: 'R$ 1.200,00',
-        parties: {
-          contractor: 'Maria Santos',
-          contracted: 'João Silva'
-        }
-      }
-    ];
-    
-    setContracts(mockContracts);
+    loadContracts();
   }, [user, navigate]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'signed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'draft':
-        return <Edit className="w-4 h-4 text-gray-500" />;
-      default:
-        return <AlertCircle className="w-4 h-4 text-red-500" />;
+  const loadContracts = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('contracts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setContracts(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar contratos:', error);
+      toast({
+        title: "Erro ao carregar contratos",
+        description: "Não foi possível carregar seus contratos. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'signed':
-        return 'Assinado';
-      case 'pending':
-        return 'Pendente';
-      case 'draft':
-        return 'Rascunho';
-      default:
-        return 'Desconhecido';
+  const handleDeleteContract = async (contractId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este contrato?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('contracts')
+        .delete()
+        .eq('id', contractId);
+
+      if (error) {
+        throw error;
+      }
+
+      setContracts(prev => prev.filter(contract => contract.id !== contractId));
+      updateContractsUsed();
+      
+      toast({
+        title: "Contrato excluído",
+        description: "O contrato foi excluído com sucesso.",
+      });
+    } catch (error) {
+      console.error('Erro ao excluir contrato:', error);
+      toast({
+        title: "Erro ao excluir contrato",
+        description: "Não foi possível excluir o contrato. Tente novamente.",
+        variant: "destructive"
+      });
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'signed':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'draft':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-      default:
-        return 'bg-red-100 text-red-800 border-red-200';
-    }
+  const getContractValue = (contract: Contract) => {
+    return contract.dados_json?.value || 'Não informado';
   };
 
-  const filteredContracts = contracts.filter(contract => 
-    filter === 'all' || contract.status === filter
-  );
+  const getContractType = (contract: Contract) => {
+    return contract.dados_json?.contractType || 'Tipo não informado';
+  };
+
+  const getContractParties = (contract: Contract) => {
+    return {
+      contractor: contract.dados_json?.contractorName || 'Não informado',
+      contracted: contract.dados_json?.contractedName || 'Não informado'
+    };
+  };
+
+  const filteredContracts = contracts.filter(contract => {
+    if (filter === 'recent') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return new Date(contract.created_at) >= weekAgo;
+    }
+    return true;
+  });
 
   const canCreateContract = () => {
     if (!user) return false;
@@ -187,14 +200,12 @@ const Dashboard = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-green-700 flex items-center">
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Assinados
+                  Criados
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-900">
-                  {contracts.filter(c => c.status === 'signed').length}
-                </div>
-                <p className="text-xs text-green-600 mt-1">Contratos finalizados</p>
+                <div className="text-2xl font-bold text-green-900">{contracts.length}</div>
+                <p className="text-xs text-green-600 mt-1">Contratos salvos</p>
               </CardContent>
             </Card>
 
@@ -202,14 +213,18 @@ const Dashboard = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-yellow-700 flex items-center">
                   <Clock className="w-4 h-4 mr-2" />
-                  Pendentes
+                  Esta Semana
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-yellow-900">
-                  {contracts.filter(c => c.status === 'pending').length}
+                  {contracts.filter(c => {
+                    const weekAgo = new Date();
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    return new Date(c.created_at) >= weekAgo;
+                  }).length}
                 </div>
-                <p className="text-xs text-yellow-600 mt-1">Aguardando assinatura</p>
+                <p className="text-xs text-yellow-600 mt-1">Novos contratos</p>
               </CardContent>
             </Card>
 
@@ -261,28 +276,38 @@ const Dashboard = () => {
               </div>
               
               <div className="flex space-x-2">
-                {['all', 'draft', 'pending', 'signed'].map((status) => (
-                  <Button
-                    key={status}
-                    variant={filter === status ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter(status as any)}
-                    className={filter === status ? "bg-blue-600 text-white" : ""}
-                  >
-                    {status === 'all' ? 'Todos' : getStatusLabel(status)}
-                  </Button>
-                ))}
+                <Button
+                  variant={filter === 'all' ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilter('all')}
+                  className={filter === 'all' ? "bg-blue-600 text-white" : ""}
+                >
+                  Todos
+                </Button>
+                <Button
+                  variant={filter === 'recent' ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilter('recent')}
+                  className={filter === 'recent' ? "bg-blue-600 text-white" : ""}
+                >
+                  Recentes
+                </Button>
               </div>
             </div>
           </div>
 
           {/* Contracts List */}
           <div className="space-y-4">
-            {filteredContracts.length === 0 ? (
+            {loading ? (
+              <Card className="p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Carregando contratos...</p>
+              </Card>
+            ) : filteredContracts.length === 0 ? (
               <Card className="p-12 text-center">
                 <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {filter === 'all' ? 'Nenhum contrato encontrado' : `Nenhum contrato ${getStatusLabel(filter).toLowerCase()}`}
+                  {filter === 'all' ? 'Nenhum contrato encontrado' : 'Nenhum contrato recente'}
                 </h3>
                 <p className="text-gray-600 mb-6">
                   {filter === 'all' 
@@ -301,69 +326,96 @@ const Dashboard = () => {
                 )}
               </Card>
             ) : (
-              filteredContracts.map((contract) => (
-                <Card key={contract.id} className="hover:shadow-lg transition-all duration-300 border border-gray-200">
-                  <CardContent className="p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                              {contract.title}
-                            </h3>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600">
-                              <span className="flex items-center">
-                                <Calendar className="w-4 h-4 mr-1" />
-                                {new Date(contract.createdAt).toLocaleDateString('pt-BR')}
-                              </span>
-                              <span>•</span>
-                              <span>{contract.type}</span>
-                              <span>•</span>
-                              <span className="font-medium text-green-600">{contract.value}</span>
+              filteredContracts.map((contract) => {
+                const parties = getContractParties(contract);
+                return (
+                  <Card key={contract.id} className="hover:shadow-lg transition-all duration-300 border border-gray-200">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                {contract.titulo}
+                              </h3>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                <span className="flex items-center">
+                                  <Calendar className="w-4 h-4 mr-1" />
+                                  {new Date(contract.created_at).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span>•</span>
+                                <span>{getContractType(contract)}</span>
+                                <span>•</span>
+                                <span className="font-medium text-green-600">{getContractValue(contract)}</span>
+                              </div>
                             </div>
+                            
+                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Salvo
+                            </Badge>
                           </div>
                           
-                          <Badge className={`${getStatusColor(contract.status)} flex items-center space-x-1`}>
-                            {getStatusIcon(contract.status)}
-                            <span>{getStatusLabel(contract.status)}</span>
-                          </Badge>
-                        </div>
-                        
-                        <div className="text-sm text-gray-600">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <div>
-                              <span className="font-medium">Contratante:</span> {contract.parties.contractor}
-                            </div>
-                            <div>
-                              <span className="font-medium">Contratado:</span> {contract.parties.contracted}
+                          <div className="text-sm text-gray-600">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <div>
+                                <span className="font-medium">Contratante:</span> {parties.contractor}
+                              </div>
+                              <div>
+                                <span className="font-medium">Contratado:</span> {parties.contracted}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center space-x-3">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="flex items-center space-x-2 hover:bg-blue-50 hover:border-blue-300"
-                        >
-                          <Edit className="w-4 h-4" />
-                          <span>Editar</span>
-                        </Button>
-                        
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="flex items-center space-x-2 hover:bg-green-50 hover:border-green-300"
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>Download</span>
-                        </Button>
+                        <div className="flex items-center space-x-3">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="flex items-center space-x-2 hover:bg-blue-50 hover:border-blue-300"
+                            onClick={() => {
+                              // Funcionalidade de editar será implementada futuramente
+                              toast({
+                                title: "Em breve",
+                                description: "Funcionalidade de edição será disponibilizada em breve.",
+                              });
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                            <span>Editar</span>
+                          </Button>
+                          
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="flex items-center space-x-2 hover:bg-green-50 hover:border-green-300"
+                            onClick={() => {
+                              // Funcionalidade de download será implementada futuramente
+                              toast({
+                                title: "Em breve",
+                                description: "Funcionalidade de download será disponibilizada em breve.",
+                              });
+                            }}
+                          >
+                            <Download className="w-4 h-4" />
+                            <span>Download</span>
+                          </Button>
+
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="flex items-center space-x-2 hover:bg-red-50 hover:border-red-300 text-red-600"
+                            onClick={() => handleDeleteContract(contract.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Excluir</span>
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         </div>

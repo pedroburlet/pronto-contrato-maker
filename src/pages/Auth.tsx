@@ -30,24 +30,50 @@ const Auth = () => {
       
       if (isLogin) {
         success = await login(formData.email, formData.password);
+        if (!success) {
+          toast({
+            title: "Erro no login",
+            description: "E-mail ou senha incorretos. Verifique suas credenciais.",
+            variant: "destructive"
+          });
+        }
       } else {
+        if (formData.password.length < 6) {
+          toast({
+            title: "Senha muito curta",
+            description: "A senha deve ter pelo menos 6 caracteres.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
+        }
+
         success = await register(formData.name, formData.email, formData.password);
+        if (success) {
+          toast({
+            title: "Conta criada com sucesso!",
+            description: "Verifique seu e-mail para confirmar a conta e fazer login.",
+          });
+          setIsLogin(true);
+          setFormData({ name: "", email: formData.email, password: "" });
+        } else {
+          toast({
+            title: "Erro ao criar conta",
+            description: "Verifique se o e-mail é válido e tente novamente.",
+            variant: "destructive"
+          });
+        }
       }
 
-      if (success) {
+      if (success && isLogin) {
         toast({
-          title: isLogin ? "Login realizado!" : "Conta criada!",
+          title: "Login realizado!",
           description: "Redirecionando para o dashboard...",
         });
         navigate("/dashboard");
-      } else {
-        toast({
-          title: "Erro",
-          description: "Verifique suas credenciais e tente novamente.",
-          variant: "destructive"
-        });
       }
     } catch (error) {
+      console.error('Erro na autenticação:', error);
       toast({
         title: "Erro",
         description: "Algo deu errado. Tente novamente.",
@@ -143,10 +169,11 @@ const Auth = () => {
                   name="password"
                   type="password"
                   required
-                  placeholder="Digite sua senha"
+                  placeholder={isLogin ? "Digite sua senha" : "Mínimo 6 caracteres"}
                   value={formData.password}
                   onChange={handleInputChange}
                   className="pl-12 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+                  minLength={isLogin ? undefined : 6}
                 />
               </div>
             </div>
@@ -164,7 +191,10 @@ const Auth = () => {
             <p className="text-gray-600">
               {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}
               <button
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setFormData({ name: "", email: "", password: "" });
+                }}
                 className="ml-2 text-blue-600 hover:text-blue-700 font-semibold transition-colors"
               >
                 {isLogin ? "Criar conta" : "Fazer login"}

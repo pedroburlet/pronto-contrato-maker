@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,27 +14,21 @@ import {
   ArrowLeft, 
   ArrowRight, 
   CheckCircle, 
-  Calendar,
-  DollarSign,
   Users,
-  Shield,
-  Clock,
-  AlertTriangle
+  Shield
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ContractData {
-  // Partes
   contractorName: string;
   contractorDocument: string;
   contractorAddress: string;
   contractedName: string;
   contractedDocument: string;
   contractedAddress: string;
-  
-  // Contrato
   contractType: string;
   contractObject: string;
   value: string;
@@ -41,8 +36,6 @@ interface ContractData {
   duration: string;
   location: string;
   date: string;
-  
-  // Cláusulas opcionais
   cancellationFine: boolean;
   cancellationFineValue: string;
   delayFine: boolean;
@@ -57,6 +50,7 @@ const CreateContract = () => {
   const { toast } = useToast();
   
   const [currentStep, setCurrentStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
   const [contractData, setContractData] = useState<ContractData>({
     contractorName: "",
     contractorDocument: "",
@@ -79,7 +73,6 @@ const CreateContract = () => {
     onlineSignature: false
   });
 
-  // Corrigir a navegação movendo para useEffect
   useEffect(() => {
     if (!user) {
       navigate("/auth");
@@ -118,7 +111,7 @@ const CreateContract = () => {
       case 2:
         return contractData.contractType && contractData.contractObject && contractData.value;
       case 3:
-        return true; // Cláusulas são opcionais
+        return true;
       case 4:
         return true;
       default:
@@ -138,16 +131,57 @@ const CreateContract = () => {
     }
   };
 
-  const handleFinish = () => {
-    // Simular criação do contrato
-    updateContractsUsed();
-    
-    toast({
-      title: "Contrato criado com sucesso!",
-      description: "Seu contrato foi gerado e está disponível no dashboard.",
-    });
-    
-    navigate("/dashboard");
+  const generateTitle = () => {
+    const type = contractData.contractType || "Contrato";
+    const contractor = contractData.contractorName || "Parte 1";
+    const contracted = contractData.contractedName || "Parte 2";
+    return `${type} - ${contractor} e ${contracted}`;
+  };
+
+  const handleFinish = async () => {
+    if (!user) {
+      toast({
+        title: "Erro",
+        description: "Usuário não autenticado.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('contracts')
+        .insert({
+          user_id: user.id,
+          titulo: generateTitle(),
+          dados_json: contractData,
+          pdf_url: null
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      updateContractsUsed();
+      
+      toast({
+        title: "Contrato criado com sucesso!",
+        description: "Seu contrato foi salvo e está disponível no dashboard.",
+      });
+      
+      navigate("/dashboard");
+    } catch (error) {
+      console.error('Erro ao salvar contrato:', error);
+      toast({
+        title: "Erro ao criar contrato",
+        description: "Ocorreu um erro ao salvar o contrato. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const generatePreview = () => {
@@ -172,13 +206,63 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
     `;
   };
 
-  // Se não há usuário, mostrar loading em vez de renderizar a página
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Verificando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const canCreateContract = () => {
+    switch (user.plan) {
+      case 'free':
+        return user.contractsUsed < 1;
+      case 'standard':
+        return user.contractsUsed < 10;
+      case 'professional':
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  if (!canCreateContract()) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="pt-20 pb-8 px-4">
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <FileText className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Limite de contratos atingido
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Você atingiu o limite de contratos do seu plano atual. 
+                Faça upgrade para continuar criando contratos.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  onClick={() => navigate("/dashboard")}
+                  variant="outline"
+                >
+                  Voltar ao Dashboard
+                </Button>
+                <Button
+                  onClick={() => navigate("/")}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700"
+                >
+                  Ver Planos
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -451,9 +535,8 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
                               checked={contractData.cancellationFine}
                               onCheckedChange={(checked) => handleInputChange('cancellationFine', checked as boolean)}
                             />
-                            <Label htmlFor="cancellationFine" className="flex items-center space-x-2 font-medium">
-                              <AlertTriangle className="w-4 h-4 text-orange-500" />
-                              <span>Multa por Cancelamento</span>
+                            <Label htmlFor="cancellationFine" className="font-medium">
+                              Multa por Cancelamento
                             </Label>
                           </div>
                           {contractData.cancellationFine && (
@@ -473,9 +556,8 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
                               checked={contractData.delayFine}
                               onCheckedChange={(checked) => handleInputChange('delayFine', checked as boolean)}
                             />
-                            <Label htmlFor="delayFine" className="flex items-center space-x-2 font-medium">
-                              <Clock className="w-4 h-4 text-red-500" />
-                              <span>Multa por Atraso</span>
+                            <Label htmlFor="delayFine" className="font-medium">
+                              Multa por Atraso
                             </Label>
                           </div>
                           {contractData.delayFine && (
@@ -495,9 +577,8 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
                               checked={contractData.confidentiality}
                               onCheckedChange={(checked) => handleInputChange('confidentiality', checked as boolean)}
                             />
-                            <Label htmlFor="confidentiality" className="flex items-center space-x-2 font-medium">
-                              <Shield className="w-4 h-4 text-blue-500" />
-                              <span>Cláusula de Confidencialidade</span>
+                            <Label htmlFor="confidentiality" className="font-medium">
+                              Cláusula de Confidencialidade
                             </Label>
                           </div>
                           {contractData.confidentiality && (
@@ -514,9 +595,8 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
                               checked={contractData.onlineSignature}
                               onCheckedChange={(checked) => handleInputChange('onlineSignature', checked as boolean)}
                             />
-                            <Label htmlFor="onlineSignature" className="flex items-center space-x-2 font-medium">
-                              <FileText className="w-4 h-4 text-green-500" />
-                              <span>Assinatura Online</span>
+                            <Label htmlFor="onlineSignature" className="font-medium">
+                              Assinatura Online
                             </Label>
                           </div>
                           {contractData.onlineSignature && (
@@ -630,10 +710,11 @@ ${contractData.onlineSignature ? 'ASSINATURA ONLINE: Habilitada' : ''}
             ) : (
               <Button
                 onClick={handleFinish}
+                disabled={isLoading}
                 className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white"
               >
                 <CheckCircle className="w-4 h-4" />
-                <span>Gerar Contrato</span>
+                <span>{isLoading ? "Salvando..." : "Gerar Contrato"}</span>
               </Button>
             )}
           </div>
