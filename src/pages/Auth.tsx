@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileText, Mail, Lock, User } from "lucide-react";
+import { FileText, Mail, Lock, User, CheckCircle, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,6 +16,7 @@ const Auth = () => {
     password: ""
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
   
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ const Auth = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setShowEmailConfirmation(false);
 
     try {
       let success = false;
@@ -33,7 +35,7 @@ const Auth = () => {
         if (!success) {
           toast({
             title: "Erro no login",
-            description: "E-mail ou senha incorretos. Verifique suas credenciais.",
+            description: "E-mail ou senha incorretos. Se você acabou de se cadastrar, verifique se confirmou seu e-mail clicando no link que enviamos.",
             variant: "destructive"
           });
         }
@@ -50,16 +52,17 @@ const Auth = () => {
 
         success = await register(formData.name, formData.email, formData.password);
         if (success) {
+          setShowEmailConfirmation(true);
           toast({
             title: "Conta criada com sucesso!",
-            description: "Verifique seu e-mail para confirmar a conta e fazer login.",
+            description: "Enviamos um e-mail de confirmação. Clique no link para ativar sua conta.",
+            duration: 10000,
           });
-          setIsLogin(true);
           setFormData({ name: "", email: formData.email, password: "" });
         } else {
           toast({
             title: "Erro ao criar conta",
-            description: "Verifique se o e-mail é válido e tente novamente.",
+            description: "Verifique se o e-mail é válido e não está em uso.",
             variant: "destructive"
           });
         }
@@ -114,6 +117,40 @@ const Auth = () => {
             }
           </p>
         </div>
+
+        {/* Email Confirmation Message */}
+        {showEmailConfirmation && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-medium text-blue-800">Confirme seu e-mail</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  Enviamos um link de confirmação para <strong>{formData.email}</strong>. 
+                  Clique no link para ativar sua conta e fazer login.
+                </p>
+                <p className="text-xs text-blue-600 mt-2">
+                  Não recebeu? Verifique sua caixa de spam ou tente novamente.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Login Instructions */}
+        {isLogin && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-medium text-amber-800">Problemas para entrar?</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  Se você acabou de se cadastrar, verifique seu e-mail e clique no link de confirmação antes de fazer login.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Form */}
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
@@ -178,6 +215,18 @@ const Auth = () => {
               </div>
             </div>
 
+            {!isLogin && (
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-600 flex items-start space-x-2">
+                  <Mail className="w-4 h-4 mt-0.5 text-gray-400" />
+                  <span>
+                    Após criar sua conta, você receberá um e-mail de confirmação. 
+                    Clique no link para ativar sua conta antes de fazer login.
+                  </span>
+                </p>
+              </div>
+            )}
+
             <Button
               type="submit"
               disabled={isLoading}
@@ -194,6 +243,7 @@ const Auth = () => {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setFormData({ name: "", email: "", password: "" });
+                  setShowEmailConfirmation(false);
                 }}
                 className="ml-2 text-blue-600 hover:text-blue-700 font-semibold transition-colors"
               >
