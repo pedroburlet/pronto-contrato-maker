@@ -66,11 +66,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select('*', { count: 'exact', head: true })
         .eq('user_id', supabaseUser.id);
 
+      // Garantir que o plano seja um dos valores válidos
+      let planType: 'free' | 'standard' | 'professional' = 'free';
+      if (subscription?.plano === 'standard' || subscription?.plano === 'professional') {
+        planType = subscription.plano as 'free' | 'standard' | 'professional';
+      }
+
       const authUser: AuthUser = {
         id: supabaseUser.id,
         name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'Usuário',
         email: supabaseUser.email || '',
-        plan: subscription?.plano || 'free',
+        plan: planType,
         contractsUsed: count || 0
       };
 

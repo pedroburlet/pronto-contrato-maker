@@ -151,14 +151,15 @@ const CreateContract = () => {
     setIsLoading(true);
 
     try {
+      // Converter contractData para JSON e garantir que user_id está correto
       const { error } = await supabase
         .from('contracts')
-        .insert({
+        .insert([{
           user_id: user.id,
           titulo: generateTitle(),
-          dados_json: contractData,
+          dados_json: contractData as any, // Cast para any para evitar erro de tipo
           pdf_url: null
-        });
+        }]);
 
       if (error) {
         throw error;
